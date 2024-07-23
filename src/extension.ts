@@ -10,8 +10,6 @@ import { ModelService } from './model/modelService';
 import { RhamtModel, IssueContainer } from './server/analyzerModel';
 import { IssueDetailsView } from './issueDetails/issueDetailsView';
 import { KaiFixDetails } from './kaiFix/kaiFix';
-import { GlobalRequestsManager }  from './kaiFix/globalRequestsManager';
-import { ProcessController }  from './kaiFix/processController';
 import { ReportView } from './report/reportView';
 import { ConfigurationEditorService } from './editor/configurationEditorService';
 import { HintItem } from './tree/hintItem';
@@ -55,12 +53,10 @@ export async function activate(context: vscode.ExtensionContext) {
     modelService = new ModelService(new RhamtModel(), out, locations);
     const configEditorService = new ConfigurationEditorService(context, modelService);
     await modelService.readCliMeta();
-    const globalRequestsManager = new GlobalRequestsManager();
-    const processController = new ProcessController(globalRequestsManager, 4, 4);
     const markerService = new MarkerService(context, modelService);
     new RhamtView(context, modelService, configEditorService, markerService);
     new ReportView(context);
-    new KaiFixDetails(context, modelService, globalRequestsManager, processController);
+    new KaiFixDetails(context, modelService);
     detailsView = new IssueDetailsView(context, locations, modelService);
     
     context.subscriptions.push(vscode.commands.registerCommand('rhamt.openDoc', async (data) => {
