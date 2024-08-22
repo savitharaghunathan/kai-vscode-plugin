@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import fetch from 'node-fetch';
 import * as path from 'path';
+import { getKaiBackendUrl } from '../extension';
 
 export interface Requests {
     id: number;
@@ -233,30 +234,37 @@ class SimplePseudoterminal implements vscode.Pseudoterminal {
         
         const postData = this.request.data;
 
-        const url = 'http://0.0.0.0:8080/get_incident_solutions_for_file';
+        const url = getKaiBackendUrl();
         const headers = {
             'Content-Type': 'application/json',
         };
 
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify(postData),
-            });
+        if (url) {
+            const kaiUrl = `${url}/get_incident_solutions_for_file`;
+            try {
+                const response = await fetch(kaiUrl, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(postData),
+                });
 
-            if (!response.ok) {
-                this.outputChannel.appendLine(`Error: ${response.statusText}`);
-                return { error: `HTTP error! status: ${response.status}` };
+                if (!response.ok) {
+                    this.outputChannel.appendLine(`Error: ${response.statusText}`);
+                    return { error: `HTTP error! status: ${response.status}` };
+                }
+
+                const responseText = await response.text();
+                this.outputChannel.appendLine(`Kai backend processed for task ${this.request.name}`);
+                return { result: responseText };
+            } catch (error) {
+                this.outputChannel.appendLine(`Error making POST request: ${error}`);
+                return { error: `Failed to perform the operation. ${error}` };
             }
+        } else {
+            vscode.window.showErrorMessage('Kai backend URL not found');
+            return { error: 'Kai backend URL not found'}
 
-            const responseText = await response.text();
-            this.outputChannel.appendLine(`Kai backend processed for task ${this.request.name}`);
-            return { result: responseText };
-        } catch (error) {
-            this.outputChannel.appendLine(`Error making POST request: ${error}`);
-            return { error: `Failed to perform the operation. ${error}` };
-        }
+      }
     }
 
     private async runKantraBinary(): Promise<any> {

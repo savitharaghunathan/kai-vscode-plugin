@@ -252,6 +252,18 @@ export class ModelService {
         return cli;
     }
 
+    public getKaiBackendUrl(): string {
+        let url = '';
+        const configs = this.model.configurations;
+        for (var i = configs.length - 1; i >= 0; i--) {
+            const url = configs[i].options['kai_server'];
+            if (url) {
+                return url;
+            }
+        }
+        return url;
+    }
+
     private parse(data: any): Promise<void> {
         return new Promise<void>(async (resolve, reject) => {
             if (data.byteLength > 0) {

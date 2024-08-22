@@ -24,7 +24,7 @@ import { log } from 'console';
 let detailsView: IssueDetailsView;
 let modelService: ModelService;
 let stateLocation: string;
-//let configuration: RhamtConfiguration
+let kaiBackendUrl: string | undefined;
 
 let extensionPath = "";
 
@@ -106,6 +106,12 @@ export async function activate(context: vscode.ExtensionContext) {
     console.log(vscode.env.appName);
 
     vscode.window.registerWebviewPanelSerializer('rhamtConfigurationEditor', new ConfigurationEditorSerializer(modelService, configEditorService));
+}
+
+export function getKaiBackendUrl() {
+    kaiBackendUrl =  modelService.getKaiBackendUrl();
+    console.log(`Kai Backend: ${kaiBackendUrl}`);
+    return kaiBackendUrl;
 }
 
 export async function openFile(uri: vscode.Uri): Promise<void> {
