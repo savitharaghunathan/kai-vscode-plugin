@@ -245,6 +245,7 @@ export class AnalyzerUtil {
 
                 }
                 results = await AnalyzerUtil.readAnalyzerResults(config, outPutPath);
+                console.log(`results: ${results}`)
                
             }
             catch (e) {

@@ -251,7 +251,7 @@ export class RhamtExplorer {
         
             const relativeFilePath = path.relative(config.options['input'][0], fileNode.file);
             window.showInformationMessage(`Relative file path: ${relativeFilePath}`);
-        
+           
             try {
                 const providers = LocalProviderRunner.getInstance().providers();
         
@@ -291,18 +291,24 @@ export class RhamtExplorer {
             try {
                 await AnalyzerUtil.generateStaticReport(libPath, config, newOutputPath);
                 await AnalyzerUtil.loadAnalyzerResults(config, undefined, newOutputPath);
-                AnalyzerUtil.updateRunEnablement(true, this.dataProvider, config);
-        
+           //     AnalyzerUtil.updateRunEnablement(true, this.dataProvider, config);
+              //  const configNode = this.dataProvider.getConfigurationNode(config);
+              //  await configNode.loadResults();
                 const issueByFileMap = fileNode.getConfig()._results.model.issueByFile;
                 const issueByFile = issueByFileMap.get(fileNode.file);
                 window.showInformationMessage(`Issue By File: ${issueByFile}`);
         
                 if (!issueByFile) {
+                    //fileNode.refreshFile();
+                    
                     this.dataProvider.removeFileNode(fileNode);
-                    window.showInformationMessage(`FileNode removed: ${fileNode.file}`);
+                    // window.showInformationMessage(`FileNode removed: ${fileNode.file}`);
+                    this.dataProvider.refreshAll(); 
                 } else {
-                    fileNode.setIssues(issueByFile);
-                    fileNode.refresh();
+                    // filenode update the issues and refresh
+                    // todo: see above
+                    // fileNode.setIssues(issueByFile);
+                    fileNode.refreshFile();
                     this.dataProvider.refreshNode(fileNode);  
                 }
         

@@ -14,6 +14,7 @@ import { MarkerService } from '../source/markers';
 import { getOpenEditors } from '../editor/configurationView';
 import { KaiFixDetails } from '../kaiFix/kaiFix';
 import { FileNode } from './fileNode';
+import { FolderNode } from './folderNode';
 
 export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
 
@@ -38,9 +39,14 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
         }));
         commands.executeCommand('setContext', 'rhamtReady', true);
         this._disposables.push(commands.registerCommand('rhamt.refreshResults', item => {
-            item.loadResults();
-            this.refreshRoots();
-            this.reveal(item, true);
+            if (item) {
+                item.loadResults();
+                this.refreshNode(item);
+                this.reveal(item, true);
+            } else {
+                this.refreshRoots();
+            }
+
         }));
     }
 
@@ -65,12 +71,19 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
         if (element instanceof ResultsNode) {
             return element.root;
         } else if (element instanceof FileNode){
-            console.log(`FileNode root type: ${element.root.constructor.name}`);
-            console.log(`Child nodes of the root: ${element.root.getFileNodeMap}`);
             return element.root;
         }
         return undefined;
     }
+    public getParentFolderNode(parentFolderPath: string): ITreeNode | undefined {
+        for (const node of this.children) {
+            if (node instanceof FolderNode && node.folder === parentFolderPath) {
+                return node;
+            }
+        }
+        return undefined;
+    }
+    
 
     public get onDidChangeTreeData(): Event<ITreeNode> {
         return this._onDidChangeTreeDataEmitter.event;
@@ -119,7 +132,12 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
     }
 
     public async refresh(node?: ITreeNode): Promise<void> {
-        this._onDidChangeTreeDataEmitter.fire(node);
+        if (node) {
+            this._onDidChangeTreeDataEmitter.fire(node);
+        } else {
+            this._onDidChangeTreeDataEmitter.fire(undefined);
+        }
+       
     }
 
     public remove(config: RhamtConfiguration): void {
@@ -155,7 +173,9 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
         this.refresh(undefined);
     }
    
-    public refreshNode(node: ITreeNode): void {
+    public refreshNode(node: ITreeNode): void { 
+        console.log(`In refresh node -------> Refreshing node: ${node.constructor.name}, path: ${node.getLabel.name}`);
+        //node.treeItem.label = "this.label";
         this._onDidChangeTreeDataEmitter.fire(node);
     }
 
@@ -171,7 +191,7 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
             if (fileNodeMap.has(fileNode.file)) {
                 fileNodeMap.delete(fileNode.file);
             }
-            this.refresh(parentNode);
+            this.refreshNode(parentNode);
         } else {
             this.refreshAll();
         }
@@ -204,8 +224,7 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
                     }
                     return node;
                 });
-    
-                window.showInformationMessage(`Configurations: ${this.modelService.model.configurations.length}`);
+
     
                 // Wait for configurations to load their results
                 await Promise.all(nodes.map(async node => {
@@ -225,7 +244,6 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
                     }
                 }
                 this.kaiFix.updateFileNodes(allfileNodeMap);
-                window.showInformationMessage(`Total entries in combined fileNodeMap: ${allfileNodeMap.size}`);
     
             } else {
                 const item = new TreeItem('Loading...');
