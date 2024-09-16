@@ -2,7 +2,7 @@
  *  Copyright (c) Red Hat. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { EventEmitter, ThemeColor, ThemeIcon, TreeItem, window } from 'vscode';
+import { EventEmitter, ThemeColor, ThemeIcon, TreeItem } from 'vscode';
 import { AbstractNode, ITreeNode } from './abstractNode';
 import { DataProvider } from './dataProvider';
 import { RhamtConfiguration } from '../server/analyzerModel';
@@ -10,10 +10,8 @@ import { ModelService } from '../model/modelService';
 import * as path from 'path';
 import { ConfigurationNode } from './configurationNode';
 import { FileItem } from './fileItem';
-import { HintNode } from './hintNode';
 import { HintsNode } from './hintsNode';
 import { ClassificationsNode } from './classificationsNode';
-import { ClassificationNode } from './classificationNode';
 
 export class FileNode extends AbstractNode<FileItem> {
     private loading: boolean = false;
@@ -77,23 +75,86 @@ export class FileNode extends AbstractNode<FileItem> {
         this.issues = newIssues;
     }
     
+    // refresh(node?: ITreeNode<TreeItem>, type?: string): void {
+    //     this.children = [];
+    //     const ext = path.extname(this.file);
+
+    //     if (this.inProgress && type) {
+    //         switch (type) {
+    //             case 'analyzing':
+    //                 this.treeItem.iconPath = new ThemeIcon('sync~spin', new ThemeColor('kaiFix.analyzing'));
+    //                 this.treeItem.label = `Analyzing: ${path.basename(this.file)}`;
+    //                 this.treeItem.tooltip = 'Analyzing Incidents';
+    //                 window.showInformationMessage(`FileNode is getting signal of Analyzing`);
+    //                 break;
+    //             case 'fixing':
+    //                 this.treeItem.iconPath = new ThemeIcon('loading~spin', new ThemeColor('kaiFix.fixing'));
+    //                 this.treeItem.label = `Fixing: ${path.basename(this.file)}`;
+    //                 this.treeItem.tooltip = 'Fixing Incidents';
+    //                 window.showInformationMessage(`FileNode is getting signal of Fixing`);
+    //                 break;
+    //             default:
+    //                 this.treeItem.iconPath = new ThemeIcon('sync~spin');
+    //                 this.treeItem.label = path.basename(this.file);
+    //                 this.treeItem.tooltip = '';
+    //                 break;
+    //         }
+    //     } else if (process.env.CHE_WORKSPACE_NAMESPACE) {
+    //         this.treeItem.iconPath = ext === '.xml' ? 'fa fa-file-o medium-orange' :
+    //             ext === '.java' ? 'fa fa-file-o medium-orange' :
+    //             'fa fa-file';
+    //         this.treeItem.label = path.basename(this.file);
+    //         this.treeItem.tooltip = '';
+    //     } else {
+    //         const icon = ext === '.xml' ? 'file_type_xml.svg' :
+    //             ext === '.java' ? 'file_type_class.svg' :
+    //             'default_file.svg';
+    //         const base = [__dirname, '..', '..', '..', 'resources'];
+    //         this.treeItem.iconPath = {
+    //             light: path.join(...base, 'light', icon),
+    //             dark: path.join(...base, 'dark', icon)
+    //         };
+    //         this.treeItem.label = path.basename(this.file);
+    //         this.treeItem.tooltip = '';
+    //     }
+
+    //     this.issues = this.root.getChildNodes(this);
+    //     if (this.issues.find(issue => issue instanceof HintNode)) {
+    //         this.children.push(new HintsNode(
+    //             this.config,
+    //             this.file,
+    //             this.modelService,
+    //             this.onNodeCreateEmitter,
+    //             this.dataProvider,
+    //             this.root));
+    //     }
+    //     if (this.issues.find(issue => issue instanceof ClassificationNode)) {
+    //         this.children.push(new ClassificationsNode(
+    //             this.config,
+    //             this.file,
+    //             this.modelService,
+    //             this.onNodeCreateEmitter,
+    //             this.dataProvider,
+    //             this.root));
+    //     }
+    //     this.dataProvider.refreshNode(this); // Ensure the tree view is refreshed
+    // }
+
     refresh(node?: ITreeNode<TreeItem>, type?: string): void {
         this.children = [];
         const ext = path.extname(this.file);
-
+    
         if (this.inProgress && type) {
             switch (type) {
                 case 'analyzing':
                     this.treeItem.iconPath = new ThemeIcon('sync~spin', new ThemeColor('kaiFix.analyzing'));
                     this.treeItem.label = `Analyzing: ${path.basename(this.file)}`;
                     this.treeItem.tooltip = 'Analyzing Incidents';
-                    window.showInformationMessage(`FileNode is getting signal of Analyzing`);
                     break;
                 case 'fixing':
                     this.treeItem.iconPath = new ThemeIcon('loading~spin', new ThemeColor('kaiFix.fixing'));
                     this.treeItem.label = `Fixing: ${path.basename(this.file)}`;
                     this.treeItem.tooltip = 'Fixing Incidents';
-                    window.showInformationMessage(`FileNode is getting signal of Fixing`);
                     break;
                 default:
                     this.treeItem.iconPath = new ThemeIcon('sync~spin');
@@ -119,28 +180,37 @@ export class FileNode extends AbstractNode<FileItem> {
             this.treeItem.label = path.basename(this.file);
             this.treeItem.tooltip = '';
         }
-
-        this.issues = this.root.getChildNodes(this);
-        if (this.issues.find(issue => issue instanceof HintNode)) {
+    
+        // Get incidents for this file from incidentManager
+        const incidents = this.root.getIncidentManager().getIncidentsForFile(this.file) || [];
+    
+        // Separate incidents into hints and classifications
+        const hints = incidents.filter(incident => incident.kind === 'hint');
+        const classifications = incidents.filter(incident => incident.kind === 'classification');
+    
+        if (hints.length > 0) {
             this.children.push(new HintsNode(
                 this.config,
                 this.file,
                 this.modelService,
                 this.onNodeCreateEmitter,
                 this.dataProvider,
-                this.root));
+                this.root
+            ));
         }
-        if (this.issues.find(issue => issue instanceof ClassificationNode)) {
+        if (classifications.length > 0) {
             this.children.push(new ClassificationsNode(
                 this.config,
                 this.file,
                 this.modelService,
                 this.onNodeCreateEmitter,
                 this.dataProvider,
-                this.root));
+                this.root
+            ));
         }
-        this.dataProvider.refreshNode(this); // Ensure the tree view is refreshed
+        this.dataProvider.refreshNode(this);
     }
+    
 
     public setInProgress(inProgress: boolean, type?: string): void {
         this.inProgress = inProgress;

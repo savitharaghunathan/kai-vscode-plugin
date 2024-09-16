@@ -9,7 +9,7 @@ import { ClassificationNode } from './classificationNode';
 import { DataProvider } from './dataProvider';
 import * as path from 'path';
 import { HintNode } from './hintNode';
-import { RhamtConfiguration, ChangeType, IClassification, IHint, ReportHolder, IIssue, IssueContainer } from '../server/analyzerModel';
+import { RhamtConfiguration, ChangeType, IClassification, IHint, ReportHolder, IIssue, IssueContainer, IIssueType } from '../server/analyzerModel';
 import { ModelService } from '../model/modelService';
 import { FileNode } from './fileNode';
 import { FolderNode } from './folderNode';
@@ -18,6 +18,7 @@ import { ClassificationsNode } from './classificationsNode';
 import { SortUtil } from './sortUtil';
 import { ResultsNode } from './resultsNode';
 import { MarkerService } from '../source/markers';
+import { FileIncidentManager, Incident } from '../server/fileIncidentUtil';
 
 
 export interface Grouping {
@@ -34,6 +35,15 @@ export class ConfigurationNode extends AbstractNode<ConfigurationItem> implement
     private issueNodes = new Map<IIssue, ITreeNode>();
     private resourceNodes = new Map<string, ITreeNode>();
     private childNodes = new Map<string, ITreeNode>();
+    private incidentManager: FileIncidentManager;
+
+    public setIncidentManager(manager: FileIncidentManager): void {
+        this.incidentManager = manager;
+    }
+    
+    public getIncidentManager(): FileIncidentManager {
+        return this.incidentManager;
+    }
 
     results = [];
 
@@ -83,8 +93,21 @@ export class ConfigurationNode extends AbstractNode<ConfigurationItem> implement
         });
     }
 
+    // public async loadResults(): Promise<void> {
+    //     if (this.config.results) {
+    //         this.computeIssues();
+    //         this.results = [
+    //             new ResultsNode(
+    //                 this.config,
+    //                 this.modelService,
+    //                 this.onNodeCreateEmitter,
+    //                 this.dataProvider,
+    //                 this)
+    //         ];
+    //     }
+    // }
     public async loadResults(): Promise<void> {
-        if (this.config.results) {
+        if (this.incidentManager) {
             this.computeIssues();
             this.results = [
                 new ResultsNode(
@@ -92,10 +115,12 @@ export class ConfigurationNode extends AbstractNode<ConfigurationItem> implement
                     this.modelService,
                     this.onNodeCreateEmitter,
                     this.dataProvider,
-                    this)
+                    this
+                )
             ];
         }
     }
+    
 
     private clearModel(): void {
         this.classifications = [];
@@ -107,21 +132,126 @@ export class ConfigurationNode extends AbstractNode<ConfigurationItem> implement
         this.fileNodeMap.clear(); 
     }
 
-    private computeIssues(): void {
-        this.clearModel();
-        if (this.config.results) {
-            this.config.results.model.classifications.forEach(classification => {
-                const root = workspace.getWorkspaceFolder(Uri.file(classification.file));
-                if (!root) return;
-                this.classifications.push(classification);
-                this.initIssue(classification, this.createClassificationNode(classification));
-            });
-            this.config.results.model.hints.forEach(hint => {
-                this.hints.push(hint);
-                this.initIssue(hint, this.createHintNode(hint));
-            });
+    // private computeIssues(): void {
+    //     this.clearModel();
+    //     if (this.config.results) {
+    //         this.config.results.model.classifications.forEach(classification => {
+    //             const root = workspace.getWorkspaceFolder(Uri.file(classification.file));
+    //             if (!root) return;
+    //             this.classifications.push(classification);
+    //             this.initIssue(classification, this.createClassificationNode(classification));
+    //         });
+    //         this.config.results.model.hints.forEach(hint => {
+    //             this.hints.push(hint);
+    //             this.initIssue(hint, this.createHintNode(hint));
+    //         });
+    //     }
+    // }
+
+    private convertIncidentToIssue(incident: Incident, configuration: RhamtConfiguration): IIssue {
+
+        let issueType: IIssueType;
+        if (incident.kind === 'hint') {
+            issueType = IIssueType.Hint;
+        } else if (incident.kind === 'classification') {
+            issueType = IIssueType.Classification;
+        } else {
+            issueType = IIssueType.Hint; 
+        }
+    
+
+        const id = incident.variables?.id || this.generateUniqueId();
+
+        const severity = incident.severity !== undefined ? incident.severity.toString() : '0';
+    
+        const commonIssue: Partial<IIssue> = {
+            id: id,
+            type: issueType,
+            title: incident.message,
+            quickfixes: incident.variables?.quickfixes || [],
+            file: incident.uri,
+            severity: severity,
+            ruleId: incident.variables?.ruleId || '',
+            ruleSetDiscription: incident.variables?.ruleSetDescription || '',
+            violationDiscription: incident.variables?.violationDescription || '',
+            rulesetName: incident.variables?.rulesetName || '',
+            effort: incident.variables?.effort || '',
+            links: incident.variables?.links || [],
+            report: '', // Provide the report path if available
+            category: incident.variables?.category || '',
+            configuration: configuration,
+            dom: null, // Set as needed
+            complete: incident.variables?.complete || false,
+            origin: incident.variables?.origin || '',
+        };
+    
+        if (issueType === IIssueType.Hint) {
+            // Create an IHint object
+            const hintIssue: IHint = {
+                ...commonIssue,
+                lineNumber: incident.lineNumber || 0,
+                column: incident.variables?.column || 0,
+                length: incident.variables?.length || 0,
+                sourceSnippet: incident.codeSnip || '',
+                hint: incident.message || '',
+                variables: incident.variables || {},
+            } as IHint;
+            return hintIssue;
+        } else if (issueType === IIssueType.Classification) {
+            // Create an IClassification object
+            const classificationIssue: IClassification = {
+                ...commonIssue,
+                description: incident.message || '',
+            } as IClassification;
+            return classificationIssue;
+        } else {
+            return commonIssue as IIssue;
         }
     }
+    
+    
+    // Helper function to generate a unique ID if none is provided
+    private generateUniqueId(): string {
+        return '_' + Math.random().toString(36).substr(2, 9);
+    }
+    
+    private computeIssues(): void {
+        this.clearModel();
+        const incidentsMap = this.incidentManager.getIncidentsMap();
+    
+        incidentsMap.forEach((incidents, file) => {
+            incidents.forEach(incident => {
+                const issue = this.convertIncidentToIssue(incident, this.config); 
+                const node = this.createIncidentNode(issue);
+                this.initIssue(issue, node);
+            });
+        });
+    }
+    private createIncidentNode(issue: IIssue): ITreeNode {
+        if (issue.type === IIssueType.Hint) {
+            const hintIssue = issue as IHint;
+            return new HintNode(
+                hintIssue,
+                this.config,
+                this.modelService,
+                this.onNodeCreateEmitter,
+                this.dataProvider,
+                this
+            );
+        } else if (issue.type === IIssueType.Classification) {
+            const classificationIssue = issue as IClassification;
+            return new ClassificationNode(
+                classificationIssue,
+                this.config,
+                this.modelService,
+                this.onNodeCreateEmitter,
+                this.dataProvider,
+                this
+            );
+        }
+        return null;
+    }
+    
 
     private initIssue(issue: IIssue, node: ITreeNode): void {
         let nodes = this.issueFiles.get(issue.file);

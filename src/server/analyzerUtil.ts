@@ -13,8 +13,8 @@ import { ProcessRunner } from './processRunner';
 import { AnalyzerProcessController } from './analyzerProcessController';
 import { RhamtConfiguration } from './analyzerModel';
 import * as path from 'path';
-import { AnalyzerResults } from './analyzerResults';
 import { AnalyzerProgressMonitor } from './analyzerProgressMonitor';
+import { FileIncidentManager } from './fileIncidentUtil';
 
 const START_TIMEOUT = 60000;
 
@@ -22,7 +22,15 @@ export class AnalyzerUtil {
 
     static activeProcessController: AnalyzerProcessController;
 
-    static async analyze(outputLocation: String, reanalyze: boolean ,dataProvider: DataProvider, config: RhamtConfiguration, modelService: ModelService,onStarted: () => void, onComplete: () => void): Promise<RhamtProcessController> {
+    static async analyze(
+        outputLocation: String, 
+        reanalyze: boolean ,
+        dataProvider: DataProvider, 
+        config: RhamtConfiguration, 
+        modelService: ModelService,
+        onStarted: () => void,
+        onComplete: () => void
+    ): Promise<RhamtProcessController> {
         let cli = undefined;
         let  outPutPath = outputLocation || config.options['output'];
         try {
@@ -133,6 +141,8 @@ export class AnalyzerUtil {
                     }
                 });
                 progress.report({ message: 'Analysis in Progress' });
+                await AnalyzerUtil.loadAnalyzerResults(config, true);
+                onComplete();
             });
         });
     }
@@ -212,72 +222,144 @@ export class AnalyzerUtil {
         return Promise.resolve(params);
     }
 
-    public static async loadAnalyzerResults(config: RhamtConfiguration, clearSummary: boolean = true, location ?: string): Promise<any> {
-        return new Promise<void>(async (resolve, reject) => {
-            let results = null;
-            let  outPutPath = location || config.options['output'];
-            try {
-                if (clearSummary) {
-                    let tries = 0;
-                    const output = outPutPath;
-                    const location = path.resolve(output, ...config.static());
+    // public static async loadAnalyzerResults(config: RhamtConfiguration, clearSummary: boolean = true, location ?: string): Promise<any> {
+    //     return new Promise<void>(async (resolve, reject) => {
+    //         let results = null;
+    //         let  outPutPath = location || config.options['output'];
+    //         try {
+    //             if (clearSummary) {
+    //                 let tries = 0;
+    //                 const output = outPutPath;
+    //                 const location = path.resolve(output, ...config.static());
 
-                    const done = () => {
-                        const exists = fs.existsSync(location);
-                        if (exists) {
-                            console.log('output exist: ' + location);
-                            return true;
-                        }
-                        else if (++tries > 15) {
-                            console.log('output was not found after long delay!');
-                            return true;
-                        }
-                        console.log('output does not exist - ' + location);
-                        return false;
-                    };
+    //                 const done = () => {
+    //                     const exists = fs.existsSync(location);
+    //                     if (exists) {
+    //                         console.log('output exist: ' + location);
+    //                         return true;
+    //                     }
+    //                     else if (++tries > 15) {
+    //                         console.log('output was not found after long delay!');
+    //                         return true;
+    //                     }
+    //                     console.log('output does not exist - ' + location);
+    //                     return false;
+    //                 };
 
-                    const poll = resolve => {
-                        if (done()) resolve();
-                        else setTimeout(_ => poll(resolve), config.delay);
-                    }
+    //                 const poll = resolve => {
+    //                     if (done()) resolve();
+    //                     else setTimeout(_ => poll(resolve), config.delay);
+    //                 }
 
-                    await new Promise(poll);
+    //                 await new Promise(poll);
 
-                }
-                results = await AnalyzerUtil.readAnalyzerResults(config, outPutPath);
+    //             }
+    //             results = await AnalyzerUtil.readAnalyzerResults(config, outPutPath);
                
-            }
-            catch (e) {
-                console.log(`Error reading analyzer results.`);
-                console.log(e);
-                return reject(`Error reading analyzer results.`);
-            }
-            try {
-                const analyzerResults = new AnalyzerResults(results, config);
-                await analyzerResults.init();
-                config.results = analyzerResults;
-                if (clearSummary) {
-                    config.summary = {
-                        skippedReports: false,
-                        outputLocation: outPutPath,
-                        executedTimestamp: '',
-                        executable: config.rhamtExecutable,
-                        executedTimestampRaw: '',
-                        active: true
-                    };
-                    config.summary.quickfixes = [];
-                    config.summary.hintCount = config.results.model.hints.length;
-                    config.summary.classificationCount = 0;
+    //         }
+    //         catch (e) {
+    //             console.log(`Error reading analyzer results.`);
+    //             console.log(e);
+    //             return reject(`Error reading analyzer results.`);
+    //         }
+    //         try {
+    //             const analyzerResults = new AnalyzerResults(results, config);
+    //             await analyzerResults.init();
+    //             config.results = analyzerResults;
+    //             if (clearSummary) {
+    //                 config.summary = {
+    //                     skippedReports: false,
+    //                     outputLocation: outPutPath,
+    //                     executedTimestamp: '',
+    //                     executable: config.rhamtExecutable,
+    //                     executedTimestampRaw: '',
+    //                     active: true
+    //                 };
+    //                 config.summary.quickfixes = [];
+    //                 config.summary.hintCount = config.results.model.hints.length;
+    //                 config.summary.classificationCount = 0;
                     
-                }
-                return resolve();
+    //             }
+    //             return resolve();
+    //         }
+    //         catch (e) {
+    //             console.log('Error processing analyzer results');
+    //             return reject(`Error processing analyzer results.`);
+    //         }
+    //     });
+    // }
+
+public static async loadAnalyzerResults(config: RhamtConfiguration, clearSummary: boolean = true, location?: string): Promise<any> {
+    return new Promise<void>(async (resolve, reject) => {
+        const outputDir = config.options['output'];
+        if (!outputDir) {
+            throw new Error('Output directory is not defined in the configuration options.');
+        }
+    
+        let outputPath = location || config.options['output'];
+
+        try {
+            if (clearSummary) {
+                // Logic to handle timing and readiness
+                let tries = 0;
+                const outputFilePath = path.resolve(outputPath, 'output.yaml');
+
+                const isOutputReady = (): boolean => {
+                    const exists = fs.existsSync(outputFilePath);
+                    if (exists) {
+                        console.log('Output file exists: ' + outputFilePath);
+                        return true;
+                    } else if (++tries > 15) {
+                        console.log('Output file not found after waiting.');
+                        return true; // Stop waiting after 15 tries
+                    }
+                    console.log('Output file does not exist: ' + outputFilePath);
+                    return false;
+                };
+
+                await new Promise<void>((resolveWait, rejectWait) => {
+                    const poll = () => {
+                        if (isOutputReady()) {
+                            resolveWait();
+                        } else {
+                            setTimeout(poll, config.delay);
+                        }
+                    };
+                    poll();
+                });
             }
-            catch (e) {
-                console.log('Error processing analyzer results');
-                return reject(`Error processing analyzer results.`);
+
+            // Initialize FileIncidentManager
+            const incidentManager = new FileIncidentManager(path.join(outputPath, 'output.yaml'), true);
+
+            // Set the incident manager in the configuration
+            config.incidentManager = incidentManager;
+
+            // Update summary as before
+            if (clearSummary) {
+                const incidentsMap = incidentManager.getIncidentsMap();
+                const hintCount = Array.from(incidentsMap.values()).reduce((count, incidents) => count + incidents.length, 0);
+
+                config.summary = {
+                    skippedReports: false,
+                    outputLocation: outputPath,
+                    executedTimestamp: new Date().toLocaleString(),
+                    executable: config.rhamtExecutable,
+                    executedTimestampRaw: new Date().toISOString(),
+                    active: true,
+                    quickfixes: [],
+                    hintCount: hintCount,
+                    classificationCount: 0, // Update if you have classifications
+                };
             }
-        });
-    }
+
+            return resolve();
+        } catch (e) {
+            console.log('Error processing analyzer results:', e);
+            return reject(`Error processing analyzer results: ${e.message}`);
+        }
+    });
+}
 
     public static async readAnalyzerResults(config: RhamtConfiguration, location: string ): Promise<any> {
         return new Promise<void>((resolve, reject) => {

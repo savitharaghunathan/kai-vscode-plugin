@@ -14,6 +14,7 @@ import { providerChannel, rhamtChannel } from '../util/console';
 import * as path from "path";
 import * as fs from 'fs';
 import { FileNode } from '../tree/fileNode';
+import { FileIncidentManager } from '../server/fileIncidentUtil';
 
 export class RhamtExplorer {
     constructor(private context: ExtensionContext,
@@ -204,10 +205,20 @@ export class RhamtExplorer {
             }
             try {
                 await AnalyzerUtil.generateStaticReport(libPath, config, config.options['output'] );
-                await AnalyzerUtil.loadAnalyzerResults(config);
-                AnalyzerUtil.updateRunEnablement(true, this.dataProvider, config);
+                //await AnalyzerUtil.loadAnalyzerResults(config);
+                const incidentManager = new FileIncidentManager(path.join(config.options['output'], 'output.yaml'), true);
+                config.incidentManager = incidentManager;
+        
+                // Update the ConfigurationNode with the new incidents
                 const configNode = this.dataProvider.getConfigurationNode(config);
-                configNode.loadResults();
+                if (configNode) {
+                    configNode.setIncidentManager(incidentManager);
+                    await configNode.loadResults();
+                }
+        
+                AnalyzerUtil.updateRunEnablement(true, this.dataProvider, config);
+                // const configNode = this.dataProvider.getConfigurationNode(config);
+                // configNode.loadResults();
                 this.refreshConfigurations();
                 this.dataProvider.reveal(configNode, true);
                 this.markerService.refreshOpenEditors();

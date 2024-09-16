@@ -458,4 +458,25 @@ export class ModelService {
         this.context.subscriptions.push(provider);
         return provider;
     }
+
+    public getActiveConfigurationForFile(filePath: string): RhamtConfiguration | undefined {
+
+        for (const config of this.model.configurations) {
+            if (config.summary && config.summary.active) {
+                const inputs = config.options['input'];
+                if (inputs && Array.isArray(inputs)) {
+                    for (const inputPath of inputs) {
+                        const normalizedFilePath = path.normalize(filePath);
+                        const normalizedInputPath = path.normalize(inputPath);
+    
+                        if (normalizedFilePath.startsWith(normalizedInputPath)) {
+                            return config;
+                        }
+                    }
+                }
+            }
+        }
+        return undefined;
+    }
+    
 }

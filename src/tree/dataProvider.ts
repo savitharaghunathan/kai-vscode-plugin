@@ -14,6 +14,7 @@ import { MarkerService } from '../source/markers';
 import { getOpenEditors } from '../editor/configurationView';
 import { KaiFixDetails } from '../kaiFix/kaiFix';
 import { FileNode } from './fileNode';
+import { FileIncidentManager } from '../server/fileIncidentUtil';
 
 export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
 
@@ -178,56 +179,160 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
     }
 
    
-    public async populateRootNodes(): Promise<any[]> {
-       // window.showInformationMessage(`-------populateRootNodes------------`);
-        let nodes: any[];
+    // public async populateRootNodes(): Promise<any[]> {
+    //    // window.showInformationMessage(`-------populateRootNodes------------`);
+    //     let nodes: any[];
     
+    //     try {
+    //         if (this.modelService.loaded) {
+    //             for (let i = this.children.length; i--;) {
+    //                 const config = this.modelService.model.configurations.find(item => item.id === this.children[i].config.id);
+    //                 if (!config) {
+    //                     this.children.splice(i, 1);
+    //                 }
+    //             }
+    //             nodes = this.modelService.model.configurations.map(config => {
+    //                 let node = this.children.find(node => node.config.id === config.id);
+    //                 if (!node) {
+    //                     node = new ConfigurationNode(
+    //                         config,
+    //                         this.grouping,
+    //                         this.modelService,
+    //                         this._onNodeCreateEmitter,
+    //                         this,
+    //                         this.markerService);
+    //                     this.children.push(node);
+    //                 }
+    //                 return node;
+    //             });
+    
+    //             window.showInformationMessage(`Configurations: ${this.modelService.model.configurations.length}`);
+    
+    //             // Wait for configurations to load their results
+    //             await Promise.all(nodes.map(async node => {
+    //                 if (node instanceof ConfigurationNode) {
+    //                     await node.loadResults();
+    //                 }
+    //             }));
+    
+    //             const allfileNodeMap = new Map<string, FileNode>();
+    //             for (const config of this.modelService.model.configurations) {
+    //                 const configNode = this.getConfigurationNode(config);
+    //                 if (configNode) {
+    //                    //window.showInformationMessage(`For each configNode map size: ${configNode.getFileNodeMap().size}`);
+    //                     for (const [key, value] of configNode.getFileNodeMap()) {
+    //                         allfileNodeMap.set(key, value);
+    //                     }
+    //                 }
+    //             }
+    //             this.kaiFix.updateFileNodes(allfileNodeMap);
+    //             window.showInformationMessage(`Total entries in combined fileNodeMap: ${allfileNodeMap.size}`);
+    
+    //         } else {
+    //             const item = new TreeItem('Loading...');
+    //             const base = [__dirname, '..', '..', '..', 'resources'];
+    //             item.iconPath = {
+    //                 light: path.join(...base, 'light', 'Loading.svg'),
+    //                 dark: path.join(...base, 'dark', 'Loading.svg')
+    //             };
+    //             nodes = [item];
+    //             (async () => setTimeout(async () => {
+    //                 try {
+    //                     await this.modelService.load();
+    //                     if (this.modelService.model.configurations.length === 0) {
+    //                         commands.executeCommand('rhamt.newConfiguration');
+    //                     }
+    //                     this.refresh();
+    //                 }
+    //                 catch (e) {
+    //                     console.log('error while loading model service.');
+    //                     console.log(e);
+    //                     window.showErrorMessage(`Error reloading explorer data.`);
+    //                 }
+    //             }, 500))();
+    //         }
+    //     } catch (e) {
+    //         console.log('dataProvider.populateRootNodes :: Error reloading explorer data.');
+    //         console.log(e);
+    //     }
+    //     return nodes;
+    // }
+    
+    public async populateRootNodes(): Promise<any[]> {
+        let nodes: any[] = [];
+
         try {
             if (this.modelService.loaded) {
-                for (let i = this.children.length; i--;) {
-                    const config = this.modelService.model.configurations.find(item => item.id === this.children[i].config.id);
-                    if (!config) {
-                        this.children.splice(i, 1);
+                const configurations = this.modelService.model.configurations || [];
+
+                if (configurations.length === 0) {
+                    // No configurations exist; prompt the user to create one
+                    const createConfig = await window.showInformationMessage(
+                        'No configurations found. Would you like to create a new configuration?',
+                        'Yes',
+                        'No'
+                    );
+
+                    if (createConfig === 'Yes') {
+                        await commands.executeCommand('rhamt.newConfiguration');
                     }
+
+                    // Return a node indicating no configurations are available
+                    const noConfigItem = new TreeItem('No configurations available.');
+                    nodes.push(noConfigItem);
+                    return nodes;
                 }
-                nodes = this.modelService.model.configurations.map(config => {
-                    let node = this.children.find(node => node.config.id === config.id);
-                    if (!node) {
-                        node = new ConfigurationNode(
-                            config,
-                            this.grouping,
-                            this.modelService,
-                            this._onNodeCreateEmitter,
-                            this,
-                            this.markerService);
-                        this.children.push(node);
+
+                // Process existing configurations
+                nodes = configurations.map(config => {
+                    if (!config.options || !config.options['output']) {
+                        console.error(`Output directory is not defined for configuration: ${config.name}`);
+                 
+                        return null; // Skip this configuration
                     }
+
+                    // Initialize the incident manager
+                    const incidentManager = new FileIncidentManager(
+                        path.join(config.options['output'], 'output.yaml'),
+                        false
+                    );
+                    config.incidentManager = incidentManager;
+
+                    // Create a new ConfigurationNode
+                    const node = new ConfigurationNode(
+                        config,
+                        this.grouping,
+                        this.modelService,
+                        this._onNodeCreateEmitter,
+                        this,
+                        this.markerService
+                    );
+                    this.children.push(node);
+                    node.setIncidentManager(config.incidentManager);
                     return node;
-                });
-    
-                window.showInformationMessage(`Configurations: ${this.modelService.model.configurations.length}`);
-    
+                }).filter(node => node !== null); // Filter out null nodes resulting from skipped configurations
+
                 // Wait for configurations to load their results
                 await Promise.all(nodes.map(async node => {
                     if (node instanceof ConfigurationNode) {
                         await node.loadResults();
                     }
                 }));
-    
+
+                // Update the kaiFix object if necessary
                 const allfileNodeMap = new Map<string, FileNode>();
-                for (const config of this.modelService.model.configurations) {
+                for (const config of configurations) {
                     const configNode = this.getConfigurationNode(config);
                     if (configNode) {
-                       //window.showInformationMessage(`For each configNode map size: ${configNode.getFileNodeMap().size}`);
                         for (const [key, value] of configNode.getFileNodeMap()) {
                             allfileNodeMap.set(key, value);
                         }
                     }
                 }
                 this.kaiFix.updateFileNodes(allfileNodeMap);
-                window.showInformationMessage(`Total entries in combined fileNodeMap: ${allfileNodeMap.size}`);
-    
+
             } else {
+                // Handle the case when modelService is not loaded
                 const item = new TreeItem('Loading...');
                 const base = [__dirname, '..', '..', '..', 'resources'];
                 item.iconPath = {
@@ -235,27 +340,34 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
                     dark: path.join(...base, 'dark', 'Loading.svg')
                 };
                 nodes = [item];
-                (async () => setTimeout(async () => {
+
+                setTimeout(async () => {
                     try {
                         await this.modelService.load();
                         if (this.modelService.model.configurations.length === 0) {
-                            commands.executeCommand('rhamt.newConfiguration');
+                            const createConfig = await window.showInformationMessage(
+                                'No configurations found after loading. Would you like to create a new configuration?',
+                                'Yes',
+                                'No'
+                            );
+
+                            if (createConfig === 'Yes') {
+                                await commands.executeCommand('rhamt.newConfiguration');
+                            }
                         }
                         this.refresh();
-                    }
-                    catch (e) {
-                        console.log('error while loading model service.');
+                    } catch (e) {
+                        console.log('Error while loading model service.');
                         console.log(e);
                         window.showErrorMessage(`Error reloading explorer data.`);
                     }
-                }, 500))();
+                }, 500);
             }
         } catch (e) {
-            console.log('dataProvider.populateRootNodes :: Error reloading explorer data.');
+            console.log('DataProvider.populateRootNodes :: Error reloading explorer data.');
             console.log(e);
         }
         return nodes;
     }
-    
     
 }

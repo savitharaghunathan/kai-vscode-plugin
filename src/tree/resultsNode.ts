@@ -25,7 +25,7 @@ export class ResultsNode extends AbstractNode<ResultsItem> {
         root: ConfigurationNode) {
         super(config, modelService, onNodeCreateEmitter, dataProvider);
         this.root = root;
-        if (!this.config.summary.skippedReports) {
+        if (this.config.summary && !this.config.summary.skippedReports) {
             this.reportNode = new ReportNode(
                 config,
                 modelService,
@@ -39,7 +39,12 @@ export class ResultsNode extends AbstractNode<ResultsItem> {
         this.children = [];
         this.treeItem = new ResultsItem();
         this.loading = false;
-        this.children = this.config.summary.skippedReports ? [] : [this.reportNode];
+        //this.children = this.config.summary.skippedReports ? [] : [this.reportNode];
+        if (this.config.summary && this.config.summary.skippedReports) {
+            this.children = [];
+        } else {
+            this.children = this.reportNode ? [this.reportNode] : [];
+        }
         const top = this.root.getChildNodes(this);
         this.children = this.children.concat(top);
         this.children.forEach(child => child.parentNode = this);
