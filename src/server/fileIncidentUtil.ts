@@ -11,7 +11,7 @@ interface Incident {
     severity?: number;
 }
 
-class FileIncidentManager {
+export class FileIncidentManager {
     private fileIncidentsMap: Map<string, Incident[]> = new Map();
     private incidentsFilePath: string;
 
@@ -76,7 +76,7 @@ class FileIncidentManager {
     }
 
     // Save the incidents map to the file
-    private saveIncidentsToFile() {
+    public saveIncidentsToFile() {
         const serializedData = JSON.stringify(Array.from(this.fileIncidentsMap.entries()), null, 2);
         fs.writeFileSync(this.incidentsFilePath, serializedData, 'utf8');
     }
