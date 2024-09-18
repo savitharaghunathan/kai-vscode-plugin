@@ -15,6 +15,7 @@ import * as path from "path";
 import * as fs from 'fs';
 import { FileNode } from '../tree/fileNode';
 import { FileIncidentManager } from '../server/fileIncidentUtil';
+//import { FileIncidentManager } from '../server/fileIncidentUtil';
 
 export class RhamtExplorer {
     constructor(private context: ExtensionContext,
@@ -205,18 +206,17 @@ export class RhamtExplorer {
             }
             try {
                 await AnalyzerUtil.generateStaticReport(libPath, config, config.options['output'] );
-                //await AnalyzerUtil.loadAnalyzerResults(config);
+                await AnalyzerUtil.loadAnalyzerResults(config);
                 const incidentManager = new FileIncidentManager(path.join(config.options['output'], 'output.yaml'), true);
                 config.incidentManager = incidentManager;
-        
+                AnalyzerUtil.updateRunEnablement(true, this.dataProvider, config);
                 // Update the ConfigurationNode with the new incidents
                 const configNode = this.dataProvider.getConfigurationNode(config);
                 if (configNode) {
-                    configNode.setIncidentManager(incidentManager);
+                    configNode.setIncidentManager(config.incidentManager);
                     await configNode.loadResults();
                 }
         
-                AnalyzerUtil.updateRunEnablement(true, this.dataProvider, config);
                 // const configNode = this.dataProvider.getConfigurationNode(config);
                 // configNode.loadResults();
                 this.refreshConfigurations();

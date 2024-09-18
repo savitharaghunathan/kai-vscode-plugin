@@ -220,13 +220,43 @@ export class ConfigurationNode extends AbstractNode<ConfigurationItem> implement
         const incidentsMap = this.incidentManager.getIncidentsMap();
     
         incidentsMap.forEach((incidents, file) => {
-            incidents.forEach(incident => {
-                const issue = this.convertIncidentToIssue(incident, this.config); 
-                const node = this.createIncidentNode(issue);
-                this.initIssue(issue, node);
-            });
+            console.log(`computeIssues: Processing ${incidents.length} incidents for file ${file}`);
+    
+            try {
+                incidents.forEach(incident => {
+                    try {
+                        // Validate the incident data
+                        if (!incident || !incident.uri) {
+                            console.warn(`Skipping invalid incident: ${JSON.stringify(incident)}`);
+                            return;
+                        }
+    
+                        // Convert the incident to an issue
+                        const issue = this.convertIncidentToIssue(incident, this.config);
+                        const node = this.createIncidentNode(issue);
+    
+                        // Categorize the issue
+                        if (issue.type === IIssueType.Hint) {
+                            this.hints.push(issue as IHint);
+                        } else if (issue.type === IIssueType.Classification) {
+                            this.classifications.push(issue as IClassification);
+                        }
+    
+                        // Initialize the issue and build resource nodes
+                        this.initIssue(issue, node);
+                    } catch (incidentError) {
+                        console.error(`Error processing incident in file ${file}:`, incidentError);
+                    }
+                });
+            } catch (fileError) {
+                console.error(`Error processing incidents for file ${file}:`, fileError);
+            }
         });
+    
+        console.log(`After computeIssues: childNodes size = ${this.childNodes.size}`);
+        console.log(`After computeIssues: issueNodes size = ${this.issueNodes.size}`);
     }
+    
     private createIncidentNode(issue: IIssue): ITreeNode {
         if (issue.type === IIssueType.Hint) {
             const hintIssue = issue as IHint;

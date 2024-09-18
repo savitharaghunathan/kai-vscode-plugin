@@ -64,8 +64,6 @@ export class FileIncidentManager {
     private mapKeyToKind(key: string): 'hint' | 'classification' {
         switch (key) {
             case 'violations':
-            case 'insights':
-            case 'unmatched':
                 return 'hint';
             case 'skipped':
                 return 'classification';
@@ -92,7 +90,7 @@ export class FileIncidentManager {
 
         // Parse the incidents for this specific file
         for (const ruleset of parsedData) {
-            for (const key of ['violations', 'insights', 'unmatched', 'skipped']) {
+            for (const key of ['violations']) {
                 if (ruleset[key]) {
                     for (const incidentKey in ruleset[key]) {
                         const incidents = ruleset[key][incidentKey].incidents || [];
