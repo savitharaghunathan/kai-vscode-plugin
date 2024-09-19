@@ -2,7 +2,8 @@ import * as fs from 'fs';
 import * as yaml from 'yaml';
 import * as path from 'path';
 
-interface Incident {
+export interface Incident {
+    kind: 'hint' | 'classification';
     uri: string;
     message: string;
     codeSnip?: string;
@@ -14,17 +15,21 @@ interface Incident {
 export class FileIncidentManager {
     private fileIncidentsMap: Map<string, Incident[]> = new Map();
     private incidentsFilePath: string;
+    outputFilePath: string;
 
-    constructor(private outputFilePath: string) {
+    constructor(outputFilePath: string, fullAnalysis: boolean) {
+        this.outputFilePath = outputFilePath;
         this.incidentsFilePath = path.join(path.dirname(outputFilePath), 'fileincidents.json');
 
-        if (fs.existsSync(this.incidentsFilePath)) {
-            // If incidents file exists, load from it
-            this.loadFromIncidentsFile();
-        } else {
-            // Otherwise, parse from YAML and create the incidents file
+        if (fullAnalysis) {
             this.parseOutputYaml();
             this.saveIncidentsToFile();
+        } else {
+            if (fs.existsSync(this.incidentsFilePath)) {
+                this.loadFromIncidentsFile();
+            } else {
+                console.log(`Fully parsed incidents file not found`);
+            }
         }
     }
 
@@ -34,12 +39,16 @@ export class FileIncidentManager {
         const parsedData = yaml.parse(yamlContent);
 
         for (const ruleset of parsedData) {
-            for (const key of ['violations', 'insights', 'unmatched', 'skipped']) {
+            for (const key of ['violations']) {
                 if (ruleset[key]) {
                     for (const incidentKey in ruleset[key]) {
                         const incidents = ruleset[key][incidentKey].incidents || [];
                         for (const incident of incidents) {
                             const filePath = this.extractFilePath(incident.uri);
+
+                            // Set the 'kind' property on the incident
+                            incident.kind = this.mapKeyToKind(key);
+
                             if (!this.fileIncidentsMap.has(filePath)) {
                                 this.fileIncidentsMap.set(filePath, []);
                             }
@@ -48,6 +57,14 @@ export class FileIncidentManager {
                     }
                 }
             }
+        }
+    }
+
+    // Map the 'key' to 'kind' for incidents
+    private mapKeyToKind(key: string): 'hint' | 'classification' {
+        switch (key) {
+            case 'violations':
+                return 'hint';
         }
     }
 
@@ -62,10 +79,35 @@ export class FileIncidentManager {
     }
 
     // Update the incidents for a specific file
-    public updateIncidentsForFile(filePath: string, incidents: Incident[]) {
-        this.fileIncidentsMap.set(path.normalize(filePath), incidents);
-        this.saveIncidentsToFile(); // Save changes to file
+    public async updateFileIncidents(outputFilePathForSpecificFile: string, filePath: string) {
+        const yamlContent = fs.readFileSync(outputFilePathForSpecificFile, 'utf8');
+        const parsedData = yaml.parse(yamlContent);
+        const newIncidents: Incident[] = [];
+
+        // Parse the incidents for this specific file
+        for (const ruleset of parsedData) {
+            for (const key of ['violations']) {
+                if (ruleset[key]) {
+                    for (const incidentKey in ruleset[key]) {
+                        const incidents = ruleset[key][incidentKey].incidents || [];
+                        for (const incident of incidents) {
+                            const incidentFilePath = this.extractFilePath(incident.uri);
+                            if (path.normalize(incidentFilePath) === path.normalize(filePath)) {
+                                // Set the 'kind' property on the incident
+                                incident.kind = this.mapKeyToKind(key);
+
+                                newIncidents.push(incident);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Update the incidents for the specific file in the map
+        this.fileIncidentsMap.set(path.normalize(filePath), newIncidents);
     }
+
 
     // Log all incidents to the console (for debugging)
     public logAllIncidents() {
@@ -73,6 +115,10 @@ export class FileIncidentManager {
             console.log(`File: ${filePath}`);
             console.log(`Incidents: ${JSON.stringify(incidents, null, 2)}`);
         }
+    }
+
+    public getIncidentsMap(): Map<string, Incident[]> {
+        return this.fileIncidentsMap;
     }
 
     // Save the incidents map to the file
@@ -84,7 +130,7 @@ export class FileIncidentManager {
     // Load the incidents from the previously saved file
     private loadFromIncidentsFile() {
         const fileContent = fs.readFileSync(this.incidentsFilePath, 'utf8');
-        const parsedMap = new Map<string, Incident[]>(JSON.parse(fileContent));
-        this.fileIncidentsMap = parsedMap;
+        const parsedEntries = JSON.parse(fileContent) as [string, Incident[]][];
+        this.fileIncidentsMap = new Map(parsedEntries);
     }
 }

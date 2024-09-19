@@ -281,24 +281,14 @@ export class RhamtExplorer {
             }
             try {
                 await AnalyzerUtil.generateStaticReport(libPath, config, config.options['output']);
-                await AnalyzerUtil.loadAnalyzerResults(config);
-        
-                
+
                 const outputYamlPath = path.join(config.options['output'], 'output.yaml');
-        
-                
-                if (fs.existsSync(outputYamlPath)) {
-                    
-                    const incidentManager = new FileIncidentManager(outputYamlPath);
-                   
-                    incidentManager.parseOutputYaml();
-                    incidentManager.saveIncidentsToFile();
-                    incidentManager.logAllIncidents();
-                  
-                } else {
-                    window.showErrorMessage(`Output file not found at ${outputYamlPath}`);
-                }
-        
+
+                const incidentManager = new FileIncidentManager(outputYamlPath, true);
+                incidentManager.logAllIncidents();
+                config.incidentManager = incidentManager;
+               
+                await AnalyzerUtil.loadAnalyzerResults(config);
         
                 AnalyzerUtil.updateRunEnablement(true, this.dataProvider, config);
                 const configNode = this.dataProvider.getConfigurationNode(config);
