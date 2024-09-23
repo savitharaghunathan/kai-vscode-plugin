@@ -72,17 +72,15 @@ export class AnalyzerResults {
                 // Iterate over each incident in the file
                 incidents.forEach(incident => {
                     try {
-                        // Log the incident for debugging
                         outputChannel1.appendLine(`Incident: ${JSON.stringify(incident, null, 2)}`);
     
-                        // Convert the incident to a hint (IIssueType.Hint)
                         const hint: IHint = {
                             type: IIssueType.Hint,
-                            id: ModelService.generateUniqueId(), // Generate a unique ID
+                            id: ModelService.generateUniqueId(), 
                             quickfixes: [],
-                            file: vscode.Uri.parse(incident.uri).fsPath, // Convert URI to file system path
+                            file: vscode.Uri.parse(incident.uri).fsPath, 
                             severity: incident.severity ? incident.severity.toString() : '',
-                            ruleId: '', // Populate this based on incident if available
+                            ruleId: '', 
                             violationDiscription: '', // Populate from incident if available
                             ruleSetDiscription: '', // Populate from incident if available
                             rulesetName: '', // Populate from incident if available

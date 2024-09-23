@@ -14,7 +14,6 @@ import { MarkerService } from '../source/markers';
 import { getOpenEditors } from '../editor/configurationView';
 import { KaiFixDetails } from '../kaiFix/kaiFix';
 import { FileNode } from './fileNode';
-import { FolderNode } from './folderNode';
 
 export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
 
@@ -39,14 +38,9 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
         }));
         commands.executeCommand('setContext', 'rhamtReady', true);
         this._disposables.push(commands.registerCommand('rhamt.refreshResults', item => {
-            if (item) {
-                item.loadResults();
-                this.refreshNode(item);
-                this.reveal(item, true);
-            } else {
-                this.refreshRoots();
-            }
-
+            item.loadResults();
+            this.refreshRoots();
+            this.reveal(item, true);
         }));
     }
 
@@ -70,20 +64,8 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
     public getParent(element: ITreeNode): ProviderResult<ITreeNode> {
         if (element instanceof ResultsNode) {
             return element.root;
-        } else if (element instanceof FileNode){
-            return element.root;
         }
-        return undefined;
     }
-    public getParentFolderNode(parentFolderPath: string): ITreeNode | undefined {
-        for (const node of this.children) {
-            if (node instanceof FolderNode && node.folder === parentFolderPath) {
-                return node;
-            }
-        }
-        return undefined;
-    }
-    
 
     public get onDidChangeTreeData(): Event<ITreeNode> {
         return this._onDidChangeTreeDataEmitter.event;
@@ -132,12 +114,7 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
     }
 
     public async refresh(node?: ITreeNode): Promise<void> {
-        if (node) {
-            this._onDidChangeTreeDataEmitter.fire(node);
-        } else {
-            this._onDidChangeTreeDataEmitter.fire(undefined);
-        }
-       
+        this._onDidChangeTreeDataEmitter.fire(node);
     }
 
     public remove(config: RhamtConfiguration): void {
@@ -173,9 +150,7 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
         this.refresh(undefined);
     }
    
-    public refreshNode(node: ITreeNode): void { 
-        console.log(`In refresh node -------> Refreshing node: ${node.constructor.name}, path: ${node.getLabel.name}`);
-        //node.treeItem.label = "this.label";
+    public refreshNode(node: ITreeNode): void {
         this._onDidChangeTreeDataEmitter.fire(node);
     }
 
@@ -183,23 +158,8 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
         this._onDidChangeTreeDataEmitter.fire(undefined); 
     }
 
-    public removeFileNode(fileNode: FileNode): void {
-        const parentNode = this.getParent(fileNode);
-
-        if (parentNode && parentNode instanceof ConfigurationNode){
-            const fileNodeMap = parentNode.getFileNodeMap();
-            if (fileNodeMap.has(fileNode.file)) {
-                fileNodeMap.delete(fileNode.file);
-            }
-            this.refreshNode(parentNode);
-        } else {
-            this.refreshAll();
-        }
-    }
-
    
     public async populateRootNodes(): Promise<any[]> {
-       // window.showInformationMessage(`-------populateRootNodes------------`);
         let nodes: any[];
     
         try {
@@ -224,7 +184,6 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
                     }
                     return node;
                 });
-
     
                 // Wait for configurations to load their results
                 await Promise.all(nodes.map(async node => {
@@ -237,7 +196,6 @@ export class DataProvider implements TreeDataProvider<ITreeNode>, Disposable {
                 for (const config of this.modelService.model.configurations) {
                     const configNode = this.getConfigurationNode(config);
                     if (configNode) {
-                       //window.showInformationMessage(`For each configNode map size: ${configNode.getFileNodeMap().size}`);
                         for (const [key, value] of configNode.getFileNodeMap()) {
                             allfileNodeMap.set(key, value);
                         }
