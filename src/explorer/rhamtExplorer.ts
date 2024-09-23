@@ -159,80 +159,7 @@ export class RhamtExplorer {
                 console.log(`Error setting up provider ${ProviderName.Java}`);
             }
         }));
-        // this.dataProvider.context.subscriptions.push(commands.registerCommand('rhamt.runConfiguration', async (item) => {
-        //     if (!item) {
-        //         const configs = this.modelService.model.configurations.map(config => config.name);
-        //         const choice = await window.showQuickPick(configs);
-        //         if (choice) {
-        //             const config = this.modelService.getConfigurationWithName(choice);
-        //             item = {config};
-        //         }
-        //         else {
-        //             return;
-        //         }                
-        //     }
-        //     const config = item.config as RhamtConfiguration;
-        //     const libPath = path.join(this.dataProvider.context.extensionPath, 'lib');
-        //     try {
-        //         AnalyzerUtil.updateRunEnablement(false, this.dataProvider, config);
-        //         const providers = LocalProviderRunner.getInstance().providers();
-        //         await writeProviderSettingsFile(config.options['output'], 
-        //             getProviderConfigs(providers, libPath, config.options['input']));
-        //         await AnalyzerUtil.analyze(
-        //             undefined,
-        //             false,
-        //             this.dataProvider,
-        //             config,
-        //             this.modelService,
-        //             () => {
-        //                 config.results = undefined;
-        //                 config.summary = undefined;
-        //                 this.refreshConfigurations();
-        //             },
-        //             () => {});
-        //         if (config.cancelled) {
-        //             rhamtChannel.print('\nAnalysis canceled');
-        //             return;
-        //         };
-        //     } catch (e) {
-        //         console.log(e);
-        //         rhamtChannel.print('\nAnalysis failed');
-        //         if (!e.notified) {
-        //             window.showErrorMessage(`Error running analysis - ${e}`);
-        //         }
-        //         AnalyzerUtil.updateRunEnablement(true, this.dataProvider, config);
-        //         this.refreshConfigurations();
-        //     }
-        //     try {
-        //         await AnalyzerUtil.generateStaticReport(libPath, config, config.options['output'] );
-        //         await AnalyzerUtil.loadAnalyzerResults(config);
-        //         AnalyzerUtil.updateRunEnablement(true, this.dataProvider, config);
-        //         const configNode = this.dataProvider.getConfigurationNode(config);
-        //         configNode.loadResults();
-        //         this.refreshConfigurations();
-        //         this.dataProvider.reveal(configNode, true);
-        //         this.markerService.refreshOpenEditors();
-        //         this.saveModel();
-        //         rhamtChannel.print('\nAnalysis completed successfully');
-        //         window.showInformationMessage('Analysis complete', 'Open Report').then(result => {
-        //             if (result === 'Open Report') {
-        //                 commands.executeCommand('rhamt.openReportExternal', {
-        //                     config,
-        //                     getReport: () => config.getReport()
-        //                 });
-        //             }
-        //         });
-        //     } catch (e) {
-        //         console.log(e);
-        //         rhamtChannel.print('\nStatic report generation failed');
-        //         if (!e.notified) {
-        //             window.showErrorMessage(`Error generating static report - ${e}`);
-        //         }
-        //         AnalyzerUtil.updateRunEnablement(true, this.dataProvider, config);
-        //         this.refreshConfigurations();
-        //     }
 
-        // }));
         this.dataProvider.context.subscriptions.push(commands.registerCommand('rhamt.runConfiguration', async (item) => {
             if (!item) {
                 const configs = this.modelService.model.configurations.map(config => config.name);
@@ -369,33 +296,30 @@ export class RhamtExplorer {
                     window.showErrorMessage(`Error running analysis: ${e.message}`);
                 }
                 fileNode.setInProgress(false);
-                this.dataProvider.refreshNode(fileNode);  // Refresh just this node
                 return;
             }
         
             try {
                 await AnalyzerUtil.generateStaticReport(libPath, config, newOutputPath);
-                await AnalyzerUtil.loadAnalyzerResults(config, undefined, newOutputPath);
-           //     AnalyzerUtil.updateRunEnablement(true, this.dataProvider, config);
-              //  const configNode = this.dataProvider.getConfigurationNode(config);
-              //  await configNode.loadResults();
-                const issueByFileMap = fileNode.getConfig()._results.model.issueByFile;
-                const issueByFile = issueByFileMap.get(fileNode.file);
-                window.showInformationMessage(`Issue By File: ${issueByFile}`);
-        
-                if (!issueByFile) {
-                    //fileNode.refreshFile();
-                    
-                    this.dataProvider.removeFileNode(fileNode);
-                    // window.showInformationMessage(`FileNode removed: ${fileNode.file}`);
-                    this.dataProvider.refreshAll(); 
-                } else {
-                    // filenode update the issues and refresh
-                    // todo: see above
-                    // fileNode.setIssues(issueByFile);
-                    fileNode.refreshFile();
-                    this.dataProvider.refreshNode(fileNode);  
+           
+                let incidentManager = config.incidentManager;
+
+                const outputPath = config.options['output'];
+            
+                if (!incidentManager) {
+                    const outputYamlPath = path.join(outputPath, 'output.yaml');
+                    incidentManager = new FileIncidentManager(outputYamlPath, true);
+                    config.incidentManager = incidentManager;
                 }
+
+                const outputYamlFileForSpecificFile = path.join(newOutputPath, 'output.yaml');
+                await incidentManager.updateFileIncidents(outputYamlFileForSpecificFile, fileNode.file);
+
+                incidentManager.saveIncidentsToFile();
+
+                await AnalyzerUtil.loadAnalyzerResults(config);
+
+                this.dataProvider.refreshAll();
         
                 this.markerService.refreshOpenEditors(fileNode.file);
                 await this.saveModel();
@@ -413,96 +337,7 @@ export class RhamtExplorer {
             }
         }));
     }
-        
-    //     this.dataProvider.context.subscriptions.push(commands.registerCommand('rhamt.rerun', async (item) => {
-    //         window.showInformationMessage(`rerun`);
-    //         const fileNode = item as FileNode;
-    //         fileNode.setInProgress(true, "analyzing");
-    //         const config = fileNode.config as RhamtConfiguration;
-    //         const libPath = path.join(this.dataProvider.context.extensionPath, 'lib');
-    //         const filePath = this.getRelativePath(fileNode.file, config.options['input'][0]);
-    //         const fileName = path.basename(filePath, path.extname(filePath));
-
-    //         const newOutputPath =  await this.createDirectoryForFile(config.options['output'],fileName);
-    //         window.showInformationMessage(`newOutputPath : ${newOutputPath}`);
-           
-    //         const relativeFilePath = path.relative(config.options['input'][0], fileNode.file);
-    //         window.showInformationMessage(`Relative file path: ${relativeFilePath}`);
-
-    //         try {
-    //             //AnalyzerUtil.updateRunEnablement(false, this.dataProvider, config);
-    //             const providers = LocalProviderRunner.getInstance().providers();
-
-    //             await writeProviderSettingsFile(newOutputPath,
-    //                 getProviderConfigs(providers, libPath, config.options['input'], relativeFilePath));
-    //             await AnalyzerUtil.analyze(
-    //                 newOutputPath,
-    //                 true,
-    //                 this.dataProvider,
-    //                 config,
-    //                 this.modelService,
-    //                 () => {
-    //                     config.results = undefined;
-    //                     config.summary = undefined;
-    //                 },
-    //                 () => {});
-    //             if (config.cancelled) {
-    //                 rhamtChannel.print(`\n Analysis canceled for File: ${filePath}`);
-    //                 return;
-    //             };
-    //         } catch (e) {
-    //             console.log(e);
-    //             rhamtChannel.print(`\n Analysis failed for File: ${filePath}`);
-    //             if (!e.notified) {
-    //                 window.showErrorMessage(`Error running analysis - ${e}`);
-    //             }
-    //            //AnalyzerUtil.updateRunEnablement(true, this.dataProvider, config);
-    //            this.refreshConfigurations();
-    //            this.dataProvider.refreshNode(fileNode);
-    //         }
-    //         try {
-    //             await AnalyzerUtil.generateStaticReport(libPath, config, newOutputPath);
-    //             await AnalyzerUtil.loadAnalyzerResults(config, undefined ,newOutputPath);
-    //             AnalyzerUtil.updateRunEnablement(true, this.dataProvider, config);
-    //             // const configNode = this.dataProvider.getConfigurationNode(config);
-    //             // configNode.loadResults();
-    //             const issueByFileMap = fileNode.getConfig()._results.model.issueByFile;
-    //             const issueByFile = issueByFileMap.get(fileNode.file);
-    //             window.showInformationMessage(`${issueByFile}`);
-    //             if (!issueByFile) {
-             
-    //                 this.dataProvider.removeFileNode(fileNode);
-    //                 window.showInformationMessage(`FileNode removed: ${fileNode.file}`);
-    //                 this.dataProvider.refreshNode(fileNode);
-                  
-    //             } else {
-    //                 fileNode.refresh();
-    //                 this.dataProvider.refreshNode(fileNode);
-    //             }
-
-        
-    //             // this.dataProvider.reveal(configNode, true);
-    //             this.markerService.refreshOpenEditors();
-    //             this.saveModel();
-    //             fileNode.setInProgress(false);
-    //             rhamtChannel.print('\nAnalysis completed successfully');
-
-    //         } catch (e) {
-    //             console.log(e);
-    //             rhamtChannel.print('\nStatic report generation failed');
-    //             if (!e.notified) {
-    //                 window.showErrorMessage(`Error generating static report - ${e}`);
-    //             }
-    //             AnalyzerUtil.updateRunEnablement(true, this.dataProvider, config);
-    //             //this.refreshConfigurations();
-    //         }
-
-    //     }));
-
-    //     //AnalyzerUtil.updateRunEnablement(true, this.dataProvider, null);
-        
-    // }
-
+    
     private async saveModel(): Promise<void> {
         try {
             // save analysis results, quickfix info, active analysis, etc.
