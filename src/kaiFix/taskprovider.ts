@@ -121,8 +121,9 @@ export class ProcessController {
         runningTasks.delete(request.id);
         this.updateFileState(request.file, { inProgress: false, taskExecution: undefined }); 
         // this.outputChannel.appendLine(`Completed task: ${JSON.stringify(request)}`);
-        // Send result back to KaiFixDetails
-        this.kaiFixDetails.handleTaskResult(request.file, result, request.type); 
+        const fileUri = vscode.Uri.file(request.file);
+        this.kaiFixDetails.handleTaskResult(fileUri, result, request.type);
+    
         this.processQueue(); 
     }
 

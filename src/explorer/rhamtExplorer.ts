@@ -245,7 +245,6 @@ export class RhamtExplorer {
         }));
 
         this.dataProvider.context.subscriptions.push(commands.registerCommand('rhamt.rerun', async (item) => {
-            window.showInformationMessage(`rerun`);
             const fileNode = item as FileNode;
             if (!fileNode) {
                 window.showErrorMessage('Invalid file node.');
@@ -259,10 +258,10 @@ export class RhamtExplorer {
             const fileName = path.basename(filePath, path.extname(filePath));
         
             const newOutputPath = await this.createDirectoryForFile(config.options['output'], fileName);
-            window.showInformationMessage(`newOutputPath : ${newOutputPath}`);
+            console.log(`newOutputPath : ${newOutputPath}`);
         
             const relativeFilePath = path.relative(config.options['input'][0], fileNode.file);
-            window.showInformationMessage(`Relative file path: ${relativeFilePath}`);
+            console.log(`Relative file path: ${relativeFilePath}`);
            
             try {
                 const providers = LocalProviderRunner.getInstance().providers();
