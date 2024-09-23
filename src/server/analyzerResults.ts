@@ -121,9 +121,6 @@ export class AnalyzerResults {
                 });
             });
     
-            // Log the final model structure for debugging
-            outputChannel1.appendLine(`Final issueByFile map: ${JSON.stringify(Array.from(this._model.issueByFile.entries()), null, 2)}`);
-    
             return Promise.resolve();
         } catch (error) {
             console.error('Error initializing analyzer results:', error);
