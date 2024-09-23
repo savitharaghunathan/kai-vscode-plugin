@@ -2,7 +2,7 @@
  *  Copyright (c) Red Hat. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { EventEmitter, ThemeColor, ThemeIcon, TreeItem, window } from 'vscode';
+import { EventEmitter, ThemeColor, ThemeIcon, TreeItem } from 'vscode';
 import { AbstractNode, ITreeNode } from './abstractNode';
 import { DataProvider } from './dataProvider';
 import { RhamtConfiguration } from '../server/analyzerModel';

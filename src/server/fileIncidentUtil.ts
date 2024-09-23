@@ -3,13 +3,17 @@ import * as yaml from 'yaml';
 import * as path from 'path';
 
 export interface Incident {
-    kind: 'hint' | 'classification';
     uri: string;
     message: string;
     codeSnip?: string;
     lineNumber?: number;
     variables?: any;
     severity?: number;
+    ruleId?: string; 
+    violationDescription?: string; 
+    ruleSetDescription?: string; 
+    rulesetName?: string; 
+    category?: string; 
 }
 
 export class FileIncidentManager {
@@ -33,7 +37,7 @@ export class FileIncidentManager {
         }
     }
 
-    // Parses the output.yaml and populates the map
+    // Parses the output.yaml and extracts relevant fields for incidents
     public parseOutputYaml() {
         const yamlContent = fs.readFileSync(this.outputFilePath, 'utf8');
         const parsedData = yaml.parse(yamlContent);
@@ -41,30 +45,34 @@ export class FileIncidentManager {
         for (const ruleset of parsedData) {
             for (const key of ['violations']) {
                 if (ruleset[key]) {
-                    for (const incidentKey in ruleset[key]) {
-                        const incidents = ruleset[key][incidentKey].incidents || [];
+                    for (const violationKey in ruleset[key]) {
+                        const violation = ruleset[key][violationKey];
+                        const incidents = violation.incidents || [];
                         for (const incident of incidents) {
                             const filePath = this.extractFilePath(incident.uri);
 
-                            // Set the 'kind' property on the incident
-                            incident.kind = this.mapKeyToKind(key);
+                            const incidentEntry: Incident = {
+                                uri: incident.uri,
+                                message: incident.message,
+                                codeSnip: incident.codeSnip,
+                                lineNumber: incident.lineNumber || 1,
+                                variables: incident.variables || {},
+                                severity: incident.severity || 0,
+                                ruleId: violationKey, 
+                                violationDescription: violation.description, 
+                                ruleSetDescription: ruleset.description, 
+                                rulesetName: ruleset.name, 
+                                category: violation.category 
+                            };
 
                             if (!this.fileIncidentsMap.has(filePath)) {
                                 this.fileIncidentsMap.set(filePath, []);
                             }
-                            this.fileIncidentsMap.get(filePath)?.push(incident);
+                            this.fileIncidentsMap.get(filePath)?.push(incidentEntry);
                         }
                     }
                 }
             }
-        }
-    }
-
-    // Map the 'key' to 'kind' for incidents
-    private mapKeyToKind(key: string): 'hint' | 'classification' {
-        switch (key) {
-            case 'violations':
-                return 'hint';
         }
     }
 
@@ -88,15 +96,26 @@ export class FileIncidentManager {
         for (const ruleset of parsedData) {
             for (const key of ['violations']) {
                 if (ruleset[key]) {
-                    for (const incidentKey in ruleset[key]) {
-                        const incidents = ruleset[key][incidentKey].incidents || [];
+                    for (const violationKey in ruleset[key]) {
+                        const violation = ruleset[key][violationKey];
+                        const incidents = violation.incidents || [];
                         for (const incident of incidents) {
                             const incidentFilePath = this.extractFilePath(incident.uri);
                             if (path.normalize(incidentFilePath) === path.normalize(filePath)) {
-                                // Set the 'kind' property on the incident
-                                incident.kind = this.mapKeyToKind(key);
-
-                                newIncidents.push(incident);
+                                const incidentEntry: Incident = {
+                                    uri: incident.uri,
+                                    message: incident.message,
+                                    codeSnip: incident.codeSnip,
+                                    lineNumber: incident.lineNumber || 1,
+                                    variables: incident.variables || {},
+                                    severity: incident.severity || 0,
+                                    ruleId: violationKey, 
+                                    violationDescription: violation.description, 
+                                    ruleSetDescription: ruleset.description, 
+                                    rulesetName: ruleset.name, 
+                                    category: violation.category 
+                                };
+                                newIncidents.push(incidentEntry);
                             }
                         }
                     }
@@ -108,8 +127,6 @@ export class FileIncidentManager {
         this.fileIncidentsMap.set(path.normalize(filePath), newIncidents);
     }
 
-
-    // Log all incidents to the console (for debugging)
     public logAllIncidents() {
         for (const [filePath, incidents] of this.fileIncidentsMap.entries()) {
             console.log(`File: ${filePath}`);

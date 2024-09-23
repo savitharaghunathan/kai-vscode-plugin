@@ -73,17 +73,16 @@ export class AnalyzerResults {
                 incidents.forEach(incident => {
                     try {
                         outputChannel1.appendLine(`Incident: ${JSON.stringify(incident, null, 2)}`);
-    
                         const hint: IHint = {
                             type: IIssueType.Hint,
-                            id: ModelService.generateUniqueId(), 
+                            id: ModelService.generateUniqueId(),
                             quickfixes: [],
-                            file: vscode.Uri.parse(incident.uri).fsPath, 
+                            file: vscode.Uri.parse(incident.uri).fsPath,
                             severity: incident.severity ? incident.severity.toString() : '',
-                            ruleId: '', 
-                            violationDiscription: '', // Populate from incident if available
-                            ruleSetDiscription: '', // Populate from incident if available
-                            rulesetName: '', // Populate from incident if available
+                            ruleId: incident.ruleId || '',
+                            violationDiscription: incident.violationDescription || '',
+                            ruleSetDiscription: incident.ruleSetDescription || '',
+                            rulesetName: incident.rulesetName || '',
                             effort: '',
                             title: incident.message,
                             links: [],
@@ -92,15 +91,15 @@ export class AnalyzerResults {
                             column: 0,
                             length: 0,
                             sourceSnippet: incident.codeSnip ? incident.codeSnip : '',
-                            category: '', // Set category if available in incident
+                            category: incident.category || '',
                             hint: incident.message,
                             configuration: this.config,
-                            dom: null, // Set if needed
+                            dom: incident,
                             complete: false,
                             origin: '',
-                            variables: incident.variables ? incident.variables : {},
+                            variables: incident.variables ? incident.variables : {}
                         };
-    
+                        
                         // Add the hint to the model
                         this._model.hints.push(hint);
     
